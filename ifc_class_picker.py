@@ -45,7 +45,6 @@ class ClassPicker(ttk.Button):
         menu.transient(self.winfo_toplevel())
         panel = ttk.Frame(menu, padding=8, relief="solid", borderwidth=1)
         panel.pack(fill="both", expand=True)
-        ttk.Label(panel, text="Suche ab 3 Zeichen").pack(anchor="w")
         query = tk.StringVar(menu)
         search = ttk.Entry(panel, textvariable=query)
         search.pack(fill="x", pady=(3, 6))

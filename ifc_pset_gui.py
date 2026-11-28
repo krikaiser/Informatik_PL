@@ -10,6 +10,8 @@ from pathlib import Path
 from tkinter import filedialog, font, ttk
 from tkinter.scrolledtext import ScrolledText
 
+from PIL import Image, ImageTk
+
 from ifc_class_picker import ClassPicker
 from ifc_pdf_report import write_pdf_report
 from ifc_pset_check import (
@@ -50,6 +52,13 @@ class AuditWindow:
     def __init__(self, root: tk.Tk, *, history_path: Path = HISTORY_PATH):
         self.root = root
         root.title("Attributprüfung")
+        with Image.open(Path(__file__).with_name("assets") / "app-icon.png") as icon:
+            icons = []
+            for size in (16, 24, 32, 48):
+                scaled = icon.copy()
+                scaled.thumbnail((size, size), Image.Resampling.LANCZOS)
+                icons.append(ImageTk.PhotoImage(scaled, master=root))
+            root.iconphoto(True, *icons)
         root.geometry("1060x730")
         root.minsize(740, 620)
         root.protocol("WM_DELETE_WINDOW", self.close)
@@ -70,10 +79,12 @@ class AuditWindow:
         style.map("Primary.TButton",
                   background=[("disabled", "#DADFE4"), ("pressed", "#143550"), ("active", "#285A82")],
                   foreground=[("disabled", "#566471")])
-        style.configure("Results.TNotebook.Tab", padding=(15, 6))
+        style.configure("Results.TNotebook.Tab", padding=(15, 6), expand=(0, 0, 0, 0))
         style.map("Results.TNotebook.Tab",
                   background=[("selected", "#173F61"), ("!selected", "#DADFE4")],
-                  foreground=[("selected", "white"), ("!selected", "#344454")])
+                  foreground=[("selected", "white"), ("!selected", "#344454")],
+                  padding=[("selected", (15, 6)), ("!selected", (15, 6))],
+                  expand=[("selected", (0, 0, 0, 0))])
 
         content = ttk.Frame(root, padding=14)
         content.pack(fill="both", expand=True)
@@ -96,6 +107,8 @@ class AuditWindow:
         self.add_button.pack(side="left")
         self.edit_button = ttk.Button(actions, text="Bearbeiten", command=self.edit_selected)
         self.edit_button.pack(side="left", padx=6)
+        self.delete_button = ttk.Button(actions, text="Löschen", command=self.delete_selected)
+        self.delete_button.pack(side="left")
         self.editor = ttk.Frame(rules_frame, padding=(0, 6, 0, 0))
         self.editor.columnconfigure(3, weight=1)
         ttk.Label(self.editor, text="PSet").grid(row=0, column=0, sticky="w")
@@ -153,10 +166,17 @@ class AuditWindow:
         self.tabs.pack(fill="both", expand=True)
         attributes = ttk.Frame(self.tabs, padding=8)
         schema = ttk.Frame(self.tabs, padding=8)
-        self.tabs.add(attributes, text="Attributprüfung")
-        self.tabs.add(schema, text="Schema-Prüfung")
+        labels = ("Attributprüfung", "Schema-Prüfung")
+        tab_font = font.nametofont("TkDefaultFont", root=root)
+        style.configure("Results.TNotebook.Tab", font=tab_font)
+        self.tab_box = tk.PhotoImage(
+            master=root, width=max(map(tab_font.measure, labels)), height=tab_font.metrics("linespace"),
+        )
+        for frame, label in zip((attributes, schema), labels, strict=True):
+            self.tabs.add(frame, text=label, image=self.tab_box, compound="center")
         group_columns = tuple(zip(GROUP_HEADERS, (155, 140, 180, 135, 125, 170, 230), strict=True))
         self.attribute_table = create_table(attributes, group_columns, height=5)
+        self.attribute_table.heading(GROUP_HEADERS[-1], text="IFC-Klassen")
         for heading in GROUP_HEADERS[4:6]:
             self.attribute_table.column(heading, anchor="e")
         self.attribute_table.bind("<<TreeviewSelect>>", self.show_attribute_group)
@@ -189,6 +209,8 @@ class AuditWindow:
         self.choose_button.state(["disabled" if busy or editing else "!disabled"])
         self.add_button.state(["!disabled" if can_edit else "disabled"])
         self.edit_button.state(["!disabled" if can_edit and self.rule_table.selection() else "disabled"])
+        can_delete = not busy and not editing and bool(self.rule_table.selection())
+        self.delete_button.state(["!disabled" if can_delete else "disabled"])
         can_reuse = can_edit and bool(self.saved_rules)
         self.saved_rule_choice.configure(state="readonly" if can_reuse else "disabled")
         self.reuse_rule_button.state(["!disabled" if can_reuse else "disabled"])
@@ -217,7 +239,7 @@ class AuditWindow:
             return
         rule = self.saved_rules[index]
         if rule in self.rules:
-            row = str(self.rules.index(rule))
+            row = self.rule_table.get_children()[self.rules.index(rule)]
             self.rule_table.selection_set(row)
             self.rule_table.see(row)
         else:
@@ -247,7 +269,21 @@ class AuditWindow:
 
     def edit_selected(self) -> None:
         if selection := self.rule_table.selection():
-            self.edit_rule(int(selection[0]))
+            self.edit_rule(self.rule_table.index(selection[0]))
+
+    def delete_selected(self) -> None:
+        selection = self.rule_table.selection()
+        if not selection or self.delete_button.instate(["disabled"]):
+            return
+        row = selection[0]
+        index = self.rule_table.index(row)
+        self.rules.pop(index)
+        self.rule_table.delete(row)
+        if children := self.rule_table.get_children():
+            next_row = children[min(index, len(children) - 1)]
+            self.rule_table.selection_set(next_row)
+            self.rule_table.see(next_row)
+        self.update_controls()
 
     def edit_rule(self, index: int | None = None) -> None:
         self.edit_index = index
@@ -278,11 +314,10 @@ class AuditWindow:
     def update_rule_row(self, rule: Rule, index: int | None = None) -> None:
         values = (rule.pset, ", ".join(rule.properties), ", ".join(rule.classes))
         if index is None:
-            row = str(len(self.rules))
             self.rules.append(rule)
-            self.rule_table.insert("", "end", iid=row, values=values)
+            row = self.rule_table.insert("", "end", values=values)
         else:
-            row = str(index)
+            row = self.rule_table.get_children()[index]
             self.rules[index] = rule
             self.rule_table.item(row, values=values)
         self.rule_table.selection_set(row)
@@ -407,7 +442,7 @@ class AuditWindow:
         self.attribute_details.delete("1.0", "end")
         if selection := self.attribute_table.selection():
             row = self.attribute_table.item(selection[0], "values")
-            text = f"{GROUP_HEADERS[-1]}\n{row[-1]}"
+            text = f"IFC-Klassen\n{row[-1]}"
             if row[3]:
                 text = f"{GROUP_HEADERS[3]}\n{row[3]}\n\n{text}"
             self.attribute_details.insert("1.0", text)

@@ -123,6 +123,12 @@ class Finding:
 
 
 @dataclass
+class CheckCoverage:
+    applicable: int = 0
+    checked: int = 0
+
+
+@dataclass
 class Audit:
     """Prüfergebnis des gelesenen Modellstands."""
 
@@ -131,6 +137,9 @@ class Audit:
     groups: list[GroupRow]
     schema: dict
     summary: dict
+    checked_on: date
+    file_stamp: tuple[int, int, int]
+    coverage: dict[str, dict[str, CheckCoverage]]
 
 
 class SchemaLogger(validator.json_logger):
@@ -296,15 +305,21 @@ def validate_schema(model: ifcopenshell.file, path: Path) -> dict:
     return result
 
 
-def open_ifc(path: Path) -> ifcopenshell.file:
+def ifc_file_stamp(path: Path) -> tuple[int, int, int]:
+    stat = path.stat()
+    return stat.st_ino, stat.st_size, stat.st_mtime_ns
+
+
+def open_ifc(path: Path, *, expected_stamp: tuple[int, int, int] | None = None) -> ifcopenshell.file:
     if path.suffix.lower() != ".ifc":
         raise ValueError(f"Ungültige Dateiendung für eine IFC-Datei: {path}")
-    before = path.stat()
+    before = ifc_file_stamp(path)
+    if expected_stamp is not None and before != expected_stamp:
+        raise OSError(f"Die IFC-Datei wurde seit der Prüfung geändert: {path}")
     ifcopenshell.get_log()
     ifcopenshell.ifcopenshell_wrapper.set_log_format_json()
     model = ifcopenshell.open(path, readonly=True)
-    after = path.stat()
-    if (before.st_ino, before.st_size, before.st_mtime_ns) != (after.st_ino, after.st_size, after.st_mtime_ns):
+    if before != ifc_file_stamp(path):
         raise OSError(f"Die IFC-Datei wurde beim Lesen geändert. Bitte die Prüfung erneut starten: {path}")
     return model
 
@@ -329,9 +344,16 @@ def read_model_classes(path: Path) -> dict[str, tuple[str, ...]]:
 
 def audit_file(path: Path, rules: tuple[Rule, ...]) -> Audit:
     """Liest eine IFC-Datei und ermittelt die Befunde pro Regel und Objekt."""
-    model = open_ifc(path)
+    checked_on = date.today()
+    file_stamp = ifc_file_stamp(path)
+    model = open_ifc(path, expected_stamp=file_stamp)
     schema = validate_schema(model, path)
     findings = []
+    coverage = {}
+    for rule in rules:
+        checks = coverage.setdefault(rule.pset, {"": CheckCoverage()})
+        for prop in rule.properties:
+            checks.setdefault(prop, CheckCoverage())
     total = checked = affected = 0
     for name, ancestors in model_class_hierarchy(model).items():
         class_rules = {}
@@ -344,7 +366,7 @@ def audit_file(path: Path, rules: tuple[Rule, ...]) -> Audit:
         total += len(objects)
         if class_rules:
             checked += len(objects)
-            affected += audit_objects(objects, class_rules, findings)
+            affected += audit_objects(objects, class_rules, findings, coverage)
 
     findings.sort(key=lambda finding: finding.obj.step_id)
     summary = {
@@ -355,12 +377,15 @@ def audit_file(path: Path, rules: tuple[Rule, ...]) -> Audit:
         "Anteil_Objekte_mit_Befund_an_allen_Objekten_Prozent": percentage(affected, total),
         "Anzahl_Attributbefunde": len(findings),
     }
-    return Audit(path, findings, group_findings(findings, total), schema, summary)
+    return Audit(path, findings, group_findings(findings, total), schema, summary, checked_on, file_stamp, coverage)
 
 
-def audit_objects(objects, object_rules, findings: list[Finding]) -> int:
+def audit_objects(
+    objects, object_rules, findings: list[Finding], coverage: dict[str, dict[str, CheckCoverage]],
+) -> int:
     names = {prop for properties in object_rules.values() for prop in properties}
     affected = 0
+    present_psets = Counter()
     for obj in objects:
         guid = str(getattr(obj, "GlobalId", "") or "")
         ref = ObjectRef(obj.id(), guid, obj.is_a(), str(getattr(obj, "Name", "") or ""))
@@ -371,6 +396,8 @@ def audit_objects(objects, object_rules, findings: list[Finding]) -> int:
             if pset not in psets:
                 # Ein fehlendes Pset ergibt einen Sammelbefund für dieses Objekt.
                 findings.append(Finding(ref, "PSET_MISSING", pset))
+            else:
+                present_psets[pset] += 1
             for prop in properties:
                 found = occurrences.get(prop, ())
                 counts = Counter(name for name, _ in found)
@@ -390,6 +417,13 @@ def audit_objects(objects, object_rules, findings: list[Finding]) -> int:
                     findings.append(Finding(ref, "EMPTY_VALUE", pset, prop))
         if len(findings) > first_finding:
             affected += 1
+    for pset, properties in object_rules.items():
+        checks = coverage[pset]
+        checks[""].applicable += len(objects)
+        checks[""].checked += len(objects)
+        for prop in properties:
+            checks[prop].applicable += len(objects)
+            checks[prop].checked += present_psets[pset]
     return affected
 
 

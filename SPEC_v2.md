@@ -6,7 +6,7 @@ Attributprüfung ist eine lokale Windows-Desktopanwendung. Sie prüft die Pflich
 
 1. **IFC-Datei auswählen** öffnet den Windows-Dateidialog mit dem Filter `*.ifc`. Nach der Auswahl zeigt das Fenster den Dateipfad an.
 2. **+** öffnet die Felder **PSet**, **Properties** und **IFC-Klassen**. In **PSet** steht der erwartete Eigenschaftssatz. In **Properties** werden die Pflichtattribute mit Kommas getrennt, ohne Leerzeichen vor oder nach dem Komma, etwa `Bahnhofsnummer,Bahnhofskategorie`. Beide Felder und jeder Listeneintrag müssen einen Namen enthalten.
-3. Das Dropdown **IFC-Klassen** listet die in der geladenen Datei vorkommenden Klassen mit Kontrollkästchen auf. **Alle** steht oben und wählt sämtliche Klassen aus. Ab drei Suchzeichen filtert die Liste während der Eingabe. **Übernehmen** oder die Eingabetaste bestätigt eine gültige Regel mit mindestens einer ausgewählten Klasse. Die Regelübersicht zeigt PSet, Pflichtattribute und ausgewählte Klassen. **Bearbeiten** öffnet eine vorhandene Regel erneut.
+3. Das Dropdown **IFC-Klassen** listet die in der geladenen Datei vorkommenden Klassen mit Kontrollkästchen auf. **Alle** steht oben und wählt sämtliche Klassen aus. Ab drei Suchzeichen filtert die Liste während der Eingabe. **Übernehmen** oder die Eingabetaste bestätigt eine gültige Regel mit mindestens einer ausgewählten Klasse. Die Regelübersicht zeigt PSet, Pflichtattribute und ausgewählte Klassen. **Bearbeiten** öffnet eine vorhandene Regel erneut. **Löschen** entfernt die ausgewählte Regel aus dem aktuellen Prüflauf. Im Regelverlauf gespeicherte Regeln bleiben dort verfügbar.
 4. Unter **Gespeicherte Regeln** stehen die bei früheren Prüfläufen verwendeten Regeln zur Auswahl. **Übernehmen** fügt die gewählte Regel zur aktuellen Regelübersicht hinzu. Dort lässt sie sich wie eine neu eingegebene Regel bearbeiten.
 5. **Überprüfung starten** startet die Attribut- und die Schema-Prüfung. Die hervorgehobene Schaltfläche ist verfügbar, sobald eine Datei geladen, mindestens eine Regel bestätigt und die Regelbearbeitung abgeschlossen ist. Während des Prüflaufs zeigt das Fenster den Status an und bleibt bedienbar. Ein weiterer Prüflauf ist nach Abschluss möglich. Die Tabellenüberschriften sind linksbündig.
 
@@ -41,7 +41,7 @@ Kann die Datei nicht gelesen oder das deklarierte Schema nicht verarbeitet werde
 
 ## Ausgaben
 
-Nach der Prüfung zeigt das Fenster den Prüfumfang, die Befundquote und eine Tabelle der Attributbefunde. Die Tabelle fasst Befunde nach Befundart, Soll-Pset, Attribut und Fundort zusammen und zeigt je Gruppe die Anzahl betroffener Objekte, ihren Anteil am Zählbereich und die Aufteilung nach IFC-Klassen. Die Gruppen sind nach der Anzahl betroffener Objekte absteigend sortiert. Die Schema-Befunde erscheinen im Reiter **Schema-Prüfung**. Der aktive Reiter ist farblich hervorgehoben, der andere bleibt grau und anklickbar.
+Nach der Prüfung zeigt das Fenster den Prüfumfang, die Befundquote und eine Tabelle der Attributbefunde. Die Tabelle fasst Befunde nach Befundart, Soll-Pset, Attribut und Fundort zusammen und zeigt je Gruppe die Anzahl betroffener Objekte, ihren Anteil am Zählbereich und die Aufteilung in der Spalte **IFC-Klassen**. Die Gruppen sind nach der Anzahl betroffener Objekte absteigend sortiert. Die Schema-Befunde erscheinen im Reiter **Schema-Prüfung**. Beide Reiter haben dieselbe Breite und Höhe. Der aktive Reiter ist farblich hervorgehoben, der andere bleibt grau und anklickbar.
 
 Nach Abschluss erscheinen **CSV speichern** und **PDF speichern**. Beide Schaltflächen speichern die angezeigten Ergebnisse im Ordner `IFC_Pruefung/` neben der geprüften IFC-Datei. `ddmmYY` steht für das lokale Exportdatum mit zweistelligem Tag, Monat und Jahr. `IFC-Dateiname` ist der Dateiname des Modells ohne die Endung `.ifc`.
 
@@ -49,9 +49,11 @@ Nach Abschluss erscheinen **CSV speichern** und **PDF speichern**. Beide Schaltf
 | --- | --- |
 | `ddmmYY_QS_IFC-Dateiname.csv` | QS-Übersicht mit denselben Befundgruppen, Objektzahlen, Anteilen und IFC-Klassen wie im Fenster. |
 | `ddmmYY_QS_Fehlerliste_IFC-Dateiname.csv` | Einzelbefunde der Attributprüfung mit STEP-ID, IFC-Klasse, Objektname und IFC-GlobalId. |
-| `ddmmYY_QS_IFC-Dateiname.pdf` | Prüfbericht mit Kennzahlen, gruppierten Attributbefunden und Schema-Befunden. |
+| `ddmmYY_QS_IFC-Dateiname.pdf` | Prüfbericht mit Modellansicht, Prüfdatum, einer nach PSet gegliederten Attributtabelle sowie Kennzahlen und Detailbefunden. |
 
 **CSV speichern** schreibt beide CSV-Dateien als Paar. Bei weiteren CSV-Exporten derselben Datei am selben Tag erhalten beide Dateinamen dieselbe laufende Nummer ab `_2`, beispielsweise `271126_QS_VST_V1_2.csv` und `271126_QS_Fehlerliste_VST_V1_2.csv`. PDF-Exporte werden separat nummeriert.
+
+Der PDF-Bericht beginnt mit Dateiname, IFC-Schema und Prüfdatum. Die zentrierte Modellansicht wird beim Export aus dem geprüften IFC-Dateistand gerendert. Die folgende Tabelle führt auch die Attribute ohne Befund auf. Grün steht für keine erforderliche Korrektur, Gelb für doppelte Attribute und Rot für fehlende PSets, fehlende oder falsch zugeordnete Attribute sowie leere Werte. Bei mehreren Befunden bestimmt die höchste Stufe die Farbe. Für Attribute ohne prüfbare Objekte bleibt die Statuszelle leer. Bei umfangreichen Listen setzt sich die Attributtabelle auf weiteren Seiten fort. Die Legende folgt auf die letzte Tabellenzeile.
 
 Die Befundquote ist der Anteil der Objekte mit mindestens einem Attributbefund an allen Objekten im Zählbereich. Dieser umfasst `IfcElement` und die zusätzlich für den Prüflauf zugeordneten Klassen. Pro Prüflauf zählt jedes betroffene Objekt für die Quote einmal. Ein Objekt zählt in jeder Befundgruppe, zu der es beiträgt, einmal.
 
